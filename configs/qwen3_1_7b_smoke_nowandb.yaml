@@ -1,0 +1,145 @@
+# Minimal GRPO smoke test config for 1-GPU on Delta A40
+# Based on torchforge apps/grpo/qwen3_1_7b.yaml
+# Goal: Run at least 1 training step, not performance testing
+
+# Global configuration - MINIMAL for smoke test
+group_size: 2           # Reduced from 8
+local_batch_size: 1     # Minimal batch
+max_req_tokens: 256     # Reduced from 1024
+max_res_tokens: 128     # Reduced from 2048
+model: "Qwen/Qwen3-1.7B"
+off_by_n: 1
+compile: false          # Disable compile for faster startup
+
+# Main loop configuration
+rollout_threads: 1
+
+# Observability - NO WANDB, console only
+metric_logging:
+  console:
+    logging_mode: global_reduce
+
+# Dataset configuration - use gsm8k like the example
+dataset:
+  path: "openai/gsm8k"
+  revision: "main"
+  data_split: "train"
+  streaming: true
+  model: ${model}
+
+# Generator configuration (vLLM)
+generator:
+  engine_args:
+    model: ${model}
+    tensor_parallel_size: 1
+    pipeline_parallel_size: 1
+    enforce_eager: true  # No CUDA graphs for smoke test
+    max_model_len: 512   # Limit context length
+    gpu_memory_utilization: 0.8
+  sampling_params:
+    n: ${group_size}
+    max_tokens: ${max_res_tokens}
+    temperature: 1.0
+    top_p: 1.0
+
+# Trainer configuration
+trainer:
+  model:
+    name: qwen3
+    flavor: 1.7B
+    hf_assets_path: hf://${model}
+  optimizer:
+    name: AdamW
+    lr: 1e-5
+    eps: 1e-8
+  lr_scheduler:
+    warmup_steps: 1
+  training:
+    local_batch_size: ${local_batch_size}
+    seq_len: 384  # max_req_tokens + max_res_tokens = 256 + 128
+    max_norm: 1.0
+    steps: 5      # SMOKE TEST: only 5 steps
+    dtype: bfloat16
+    gc_freq: 1
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+    disable_loss_parallel: true
+  checkpoint:
+    enable: false  # No checkpoints for smoke test
+  activation_checkpoint:
+    mode: selective
+    selective_ac_option: op
+
+# Replay buffer configuration
+replay_buffer:
+  batch_size: ${local_batch_size}
+  max_policy_age: ${off_by_n}
+  dp_size: 1
+
+# Reference model configuration
+ref_model:
+  model:
+    name: qwen3
+    flavor: 1.7B
+    hf_assets_path: hf://${model}
+  training:
+    seq_len: 384
+    dtype: bfloat16
+    gc_freq: 1
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+  checkpoint:
+    enable: true
+    initial_load_path: hf://${model}
+    initial_load_in_hf: true
+
+# Services - resource allocations for services
+services:
+  generator:
+    procs: 1
+    num_replicas: 1
+    mesh_name: generator
+    with_gpus: true
+  ref_model:
+    procs: 1
+    num_replicas: 1
+    mesh_name: ref_model
+    with_gpus: true
+  reward_actor:
+    procs: 1
+    num_replicas: 1
+    mesh_name: reward_actor
+    with_gpus: false
+
+# Actors - resource allocations for actors
+actors:
+  dataset:
+    procs: 1
+    with_gpus: false
+    mesh_name: dataset
+  trainer:
+    procs: 1
+    with_gpus: true
+    mesh_name: trainer
+  replay_buffer:
+    procs: 1
+    with_gpus: false
+    mesh_name: replay_buffer
+  compute_advantages:
+    procs: 1
+    with_gpus: false
+    mesh_name: compute_advantages
