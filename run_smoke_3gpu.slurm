@@ -1,20 +1,20 @@
 #!/bin/bash
-#SBATCH --job-name=grpo_smoke_1gpu
+#SBATCH --job-name=grpo_smoke_3gpu
 #SBATCH --account=bcjw-delta-gpu
 #SBATCH --partition=gpuA40x4
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
-#SBATCH --gpus=1
-#SBATCH --mem=64g
+#SBATCH --cpus-per-task=32
+#SBATCH --gpus=3
+#SBATCH --mem=128g
 #SBATCH --time=00:30:00
-#SBATCH --output=logs/grpo_smoke_1gpu_%j.out
-#SBATCH --error=logs/grpo_smoke_1gpu_%j.err
+#SBATCH --output=logs/grpo_smoke_3gpu_%j.out
+#SBATCH --error=logs/grpo_smoke_3gpu_%j.err
 
 set -euo pipefail
 
 echo "========================================"
-echo "==== GRPO 1-GPU SMOKE TEST - START ===="
+echo "==== GRPO 3-GPU SMOKE TEST - START ===="
 echo "========================================"
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node: $(hostname)"
@@ -203,7 +203,7 @@ cd "$TORCHFORGE_ROOT"
 
 $PYTHON_BIN -m apps.grpo.main \
     --config "$FULL_CONFIG_PATH" \
-    2>&1 | tee "$REPO_ROOT/logs/grpo_run_${SLURM_JOB_ID}.log"
+    2>&1 | tee "$REPO_ROOT/logs/grpo_3gpu_run_${SLURM_JOB_ID}.log"
 
 set +x
 
